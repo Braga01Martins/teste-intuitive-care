@@ -1,3 +1,14 @@
+> **⚠️ DISCLAIMER: NOTA SOBRE A ORIGEM DOS DADOS**
+>
+> Os arquivos originais `.csv` de `Demontracoes_contabeis` da ANS não contêm nativamente os campos: **CNPJ**, **RazaoSocial** e **ValorDespesas**.
+> Para atender aos requisitos do teste mantendo a integridade dos dados, adotei a seguinte estratégia de engenharia de dados:
+>
+> * **CNPJ:** Enriquecido via cruzamento (*JOIN*) entre o arquivo de cadastro (`operadoras_de_plano_de_saude_ativas`) e as demonstrações, utilizando a chave primária `REG_ANS` (Cadastro) x `REGISTRO_OPERADORA` (Contábil).
+> * **Razão Social:** Recuperada do arquivo de cadastro (`operadoras_de_plano_de_saude_ativas`) através do mesmo cruzamento.
+> * **Trimestre:** Calculado via lógica de extração temporal a partir da coluna `DATA` do arquivo `Demontracoes_contabeis`.
+> * **Ano:** Extraído da mesma coluna `DATA` do arquivo `Demontracoes_contabeis`.
+> * **Valor Despesas:** Mapeado diretamente a partir da coluna `VL_SALDO_FINAL` das demonstrações contábeis.
+
 # 🏥 Intuitive Care - Teste Técnico (Full Stack)
 
 Este repositório contém a solução completa para o desafio técnico de estágio da Intuitive Care. O projeto consiste em uma aplicação Full Stack para análise de dados da ANS (Agência Nacional de Saúde Suplementar), cobrindo desde a extração de dados (ETL) até a visualização em um Dashboard interativo.
