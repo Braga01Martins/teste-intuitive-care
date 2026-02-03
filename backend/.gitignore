@@ -1,0 +1,11 @@
+# Ignorar ambiente virtual (pesado e inútil no git)
+venv/
+.env
+
+# Ignorar arquivos compilados do Python
+__pycache__/
+*.pyc
+
+# Ignorar arquivos do sistema (Mac/Windows)
+.DS_Store
+thumbs.db

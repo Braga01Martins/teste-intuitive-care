@@ -24,7 +24,7 @@ public class ColetaDadosAns {
     
     // Outputs
     private static final String OUTPUT_CONSOLIDADO = "consolidado_despesas.csv";
-    private static final String OUTPUT_AGREGADO = "despesas_agredadas.csv";
+    private static final String OUTPUT_AGREGADO = "despesas_agregadas.csv";
 
     // Filtros
     private static final String FILTER_TEXT = "Despesas com Eventos / Sinistros";
@@ -343,46 +343,134 @@ public class ColetaDadosAns {
     }
 
     // --- UTILITÁRIOS ---
-    
- // Método para ler, limpar e sobrescrever o arquivo Relatorio_cadop.csv original em UTF-8
-    private static void tratarArquivoCadop(Path caminhoArquivo) throws IOException {
-        System.out.println("Lendo e tratando arquivo: " + caminhoArquivo);
+ // --- MÉTODOS DE VALIDAÇÃO DE CNPJ ---
 
-        // Lê todas as linhas (UTF-8)
+ // 1. Arruma o CNPJ (Tira lixo e coloca zeros a esquerda)
+ private static String padronizarCnpj(String cnpj) {
+     // Remove tudo que não é número
+     String apenasNumeros = cnpj.replaceAll("[^0-9]", "");
+     
+     // Se estiver vazio, retorna vazio
+     if (apenasNumeros.isEmpty()) return "";
+
+     // Se tiver menos de 14 dígitos (erro do Excel), preenche com zeros à esquerda
+     while (apenasNumeros.length() < 14) {
+         apenasNumeros = "0" + apenasNumeros;
+     }
+     
+     // Se tiver mais de 14 (erro grave), corta
+     if (apenasNumeros.length() > 14) {
+         apenasNumeros = apenasNumeros.substring(0, 14);
+     }
+
+     return apenasNumeros;
+ }
+
+ // 2. Valida matemática (Dígitos Verificadores) - Algoritmo Padrão Receita Federal
+ public static boolean isCnpjValido(String cnpj) {
+     cnpj = padronizarCnpj(cnpj);
+     if (cnpj.length() != 14 || cnpj.matches("(\\d)\\1{13}")) return false;
+
+     try {
+         int sm, i, r, num, peso;
+         char dig13, dig14;
+
+         // Calculo do 1o. Digito Verificador
+         sm = 0;
+         peso = 2;
+         for (i = 11; i >= 0; i--) {
+             num = (int) (cnpj.charAt(i) - 48);
+             sm = sm + (num * peso);
+             peso = peso + 1;
+             if (peso == 10) peso = 2;
+         }
+         r = sm % 11;
+         if ((r == 0) || (r == 1)) dig13 = '0';
+         else dig13 = (char) ((11 - r) + 48);
+
+         // Calculo do 2o. Digito Verificador
+         sm = 0;
+         peso = 2;
+         for (i = 12; i >= 0; i--) {
+             num = (int) (cnpj.charAt(i) - 48);
+             sm = sm + (num * peso);
+             peso = peso + 1;
+             if (peso == 10) peso = 2;
+         }
+         r = sm % 11;
+         if ((r == 0) || (r == 1)) dig14 = '0';
+         else dig14 = (char) ((11 - r) + 48);
+
+         return (dig13 == cnpj.charAt(12)) && (dig14 == cnpj.charAt(13));
+     } catch (InputMismatchException e) {
+         return false;
+     }
+ }
+ // Método para ler, limpar e sobrescrever o arquivo Relatorio_cadop.csv original em UTF-8
+    
+    private static void tratarArquivoCadop(Path caminhoArquivo) throws IOException {
+        System.out.println("Lendo e validando CNPJs no arquivo: " + caminhoArquivo);
+
         List<String> linhas = Files.readAllLines(caminhoArquivo, StandardCharsets.UTF_8);
         List<String> linhasTratadas = new ArrayList<>();
 
-        for (String linha : linhas) {
-            // 1. DETECTOR DE EXCEL 
-            // Se a linha tiver TABS (\t), substitui por Ponto e Vírgula
-            if (linha.contains("\t")) {
-                linha = linha.replace("\t", ";");
-            }
-            // Se tiver vírgulas (e não tiver ponto e vírgula), substitui também
-            else if (linha.contains(",") && !linha.contains(";")) {
-                linha = linha.replace(",", ";");
-            }
-
-            // 2. Agora faz o tratamento normal (que já funcionava)
-            String[] colunas = linha.split(";", -1);
-            
-            for (int i = 0; i < colunas.length; i++) {
-                // Remove aspas e espaços das pontas
-                colunas[i] = colunas[i].replace("\"", "").trim();
-                
-                // Se for vazio, escreve "vazio"
-                if (colunas[i].isEmpty()) {
-                    colunas[i] = "vazio";
-                }
-            }
-            
-            // Reconstrói a linha bonitinha com ponto e vírgula
-            linhasTratadas.add(String.join(";", colunas));
+        // Pega cabeçalho
+        String cabecalho = "";
+        int numColunas = 0;
+        if (!linhas.isEmpty()) {
+            cabecalho = linhas.get(0).replace("\t", ";").replace(",", ";");
+            // Força ponto e vírgula no cabeçalho
+            linhasTratadas.add(cabecalho);
+            numColunas = cabecalho.split(";").length;
         }
 
-        // Grava de volta no disco
+        int cnpjsCorrigidos = 0;
+        int cnpjsInvalidos = 0;
+
+        for (int i = 1; i < linhas.size(); i++) {
+            String linha = linhas.get(i);
+            
+            // Normaliza separadores
+            if (linha.contains("\t")) linha = linha.replace("\t", ";");
+            else if (linha.contains(",") && !linha.contains(";")) linha = linha.replace(",", ";");
+
+            String[] colunas = linha.split(";", -1);
+            List<String> colunasFinais = new ArrayList<>();
+
+            // O CNPJ geralmente é a coluna 1 (índice 1) ou 0 dependendo do arquivo. 
+            // No seu CSV enviado: Coluna 0 = Registro, Coluna 1 = CNPJ.
+            
+            for (int j = 0; j < numColunas; j++) {
+                String valor = (j < colunas.length) ? colunas[j] : "";
+                valor = valor.replace("\"", "").trim();
+                if (valor.isEmpty()) valor = "vazio";
+
+                // --- AQUI ENTRA A VALIDAÇÃO DO CNPJ (Coluna Index 1) ---
+                if (j == 1) { 
+                    String cnpjOriginal = valor;
+                    String cnpjNovo = padronizarCnpj(cnpjOriginal); // Coloca os zeros
+                    
+                    // Valida a matemática
+                    if (!isCnpjValido(cnpjNovo)) {
+                        // DECISÃO DE PROJETO: Não paramos o processo, apenas avisamos e salvamos o formatado
+                        System.out.println("⚠️ AVISO: CNPJ matematicamente inválido na linha " + (i+1) + ": " + cnpjNovo);
+                        cnpjsInvalidos++;
+                    } else if (!cnpjOriginal.equals(cnpjNovo)) {
+                        cnpjsCorrigidos++;
+                    }
+                    valor = cnpjNovo; // Salva o CNPJ arrumadinho no arquivo
+                }
+                // -------------------------------------------------------
+
+                colunasFinais.add(valor);
+            }
+            linhasTratadas.add(String.join(";", colunasFinais));
+        }
+
         Files.write(caminhoArquivo, linhasTratadas, StandardCharsets.UTF_8);
-        System.out.println("Arquivo corrigido (TABS removidos) com sucesso!");
+        System.out.println("Processamento concluído!");
+        System.out.println("CNPJs corrigidos (zeros adicionados): " + cnpjsCorrigidos);
+        System.out.println("CNPJs matematicamente inválidos (mantidos): " + cnpjsInvalidos);
     }
     private static String getVal(String[] parts, int idx) {
         if (idx >= parts.length) return "";
@@ -407,13 +495,14 @@ public class ColetaDadosAns {
     }
 
     private static String formatarCnpj(String c) {
-        if (c == null || c.length() != 14) return c;
-        return c.replaceAll("(\\d{2})(\\d{3})(\\d{3})(\\d{4})(\\d{2})", "$1.$2.$3/$4-$5");
+        if (c == null) return "";
+        //  garantir  que vai gravar no CSV apenas "12345678000199"
+        return c.replaceAll("[^0-9]", "");
     }
 
     private static boolean isValidCNPJ(String cnpj) {
         if (cnpj == null || cnpj.length() != 14) return false;
-        // Implementação simplificada para brevidade. Recomenda-se Modulo 11 completo em produção.
+        // Implementação simplificada para brevidade. 
         return !cnpj.matches("(\\d)\\1{13}"); 
     }
     
