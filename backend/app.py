@@ -28,6 +28,8 @@ def home():
     return jsonify({"status": "API Flask Online 🚀"})
 
 # --- ROTA 1: LISTAGEM PAGINADA COM BUSCA ---
+# ... importações continuam iguais ...
+
 @app.route('/operadoras', methods=['GET'])
 def listar_operadoras():
     conn = get_connection()
@@ -36,29 +38,34 @@ def listar_operadoras():
     
     cur = conn.cursor()
 
-    # Pega parâmetros da URL (ex: ?page=1&limit=10&search=Unimed)
     page = request.args.get('page', 1, type=int)
     limit = request.args.get('limit', 10, type=int)
     search = request.args.get('search', None)
 
     offset = (page - 1) * limit
 
-    # Base da Query
     sql = "SELECT registro_ans, cnpj, razao_social, modalidade FROM tb_operadoras WHERE 1=1"
     params = []
 
-    # Adiciona filtro se houver busca
     if search:
+        # --- A MÁGICA ACONTECE AQUI ---
+        # 1. Cria uma versão "limpa" (sem pontos, barras e traços) para comparar com o CNPJ do banco
+        termo_limpo = search.replace('.', '').replace('/', '').replace('-', '')
+        
+        # 2. A SQL busca:
+        #    OU o Nome contém o que foi digitado (ex: "Unimed")
+        #    OU o CNPJ contém a versão limpa (ex: "123456")
         sql += " AND (razao_social ILIKE %s OR cnpj ILIKE %s)"
-        termo = f"%{search}%"
-        params.extend([termo, termo])
+        
+        params.extend([f"%{search}%", f"%{termo_limpo}%"])
+        # -------------------------------
     
-    # Conta total
+    # Conta total (para paginação)
     count_sql = f"SELECT count(*) as total FROM ({sql}) as sub"
     cur.execute(count_sql, params)
     total_registros = cur.fetchone()['total']
 
-    # Finaliza query
+    # Ordenação e Limites
     sql += " ORDER BY razao_social ASC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
 
