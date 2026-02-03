@@ -28,6 +28,7 @@ public class ColetaDadosAns {
 
     // Filtros
     private static final String FILTER_TEXT = "Despesas com Eventos / Sinistros";
+    
 
     // --- CLASSES DE DADOS ---
 
@@ -81,6 +82,7 @@ public class ColetaDadosAns {
 
         public double getMediaTrimestral() {
             if (trimestresPresentes.isEmpty()) return 0.0;
+            
             // Média do total gasto por trimestre ativo
             return totalDespesas / trimestresPresentes.size();
         }
@@ -98,16 +100,23 @@ public class ColetaDadosAns {
             String root = System.getProperty("user.dir");
             Path tempDir = Paths.get(root, TEMP_FOLDER);
             Path auxFile = Paths.get(root, AUX_FOLDER, CADOP_FILE);
+            Path arquivoCadop = Paths.get("AUX_CSV/Relatorio_cadop.csv");
             
             Path pathConsolidado = tempDir.resolve(OUTPUT_CONSOLIDADO);
             Path pathAgregado = tempDir.resolve(OUTPUT_AGREGADO);
 
+           /**Remove os espacos em branco null  do arquivo baixado de 
+            * operadoras_de_plano_de_saude_ativas*/
+         
+            tratarArquivoCadop(arquivoCadop);
+            
             // 1. Setup de Diretórios
             prepararDiretorio(tempDir);
 
             // 2. Carregar CADOP em Memória (Hash Join Setup)
             // Mapa Principal: Chave = REG_ANS (pois é o dado confiável no arquivo raw da ANS)
             // Mapa Secundário: Chave = CNPJ (para cumprir o requisito explícito de join por CNPJ)
+            
             System.out.println("[ETAPA 1] Carregando tabela CADOP...");
             Map<String, DadosCadop> mapPorCnpj = carregarCadopPorCnpj(auxFile);
             Map<String, String> mapRegAnsParaCnpj = carregarRegAnsParaCnpj(auxFile); // Helper para linkar raw -> cnpj
@@ -178,7 +187,7 @@ public class ColetaDadosAns {
         return map;
     }
 
-    // Helper simples para mapear REG_ANS -> CNPJ (para fazer a ponte entre Raw Data e o Join Key)
+    // Helper  para mapear REG_ANS -> CNPJ (para fazer a ponte entre Raw Data e o Join Key)
     private static Map<String, String> carregarRegAnsParaCnpj(Path path) throws IOException {
         Map<String, String> map = new HashMap<>();
         try (BufferedReader br = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
@@ -334,7 +343,47 @@ public class ColetaDadosAns {
     }
 
     // --- UTILITÁRIOS ---
+    
+ // Método para ler, limpar e sobrescrever o arquivo Relatorio_cadop.csv original em UTF-8
+    private static void tratarArquivoCadop(Path caminhoArquivo) throws IOException {
+        System.out.println("Lendo e tratando arquivo: " + caminhoArquivo);
 
+        // Lê todas as linhas (UTF-8)
+        List<String> linhas = Files.readAllLines(caminhoArquivo, StandardCharsets.UTF_8);
+        List<String> linhasTratadas = new ArrayList<>();
+
+        for (String linha : linhas) {
+            // 1. DETECTOR DE EXCEL 
+            // Se a linha tiver TABS (\t), substitui por Ponto e Vírgula
+            if (linha.contains("\t")) {
+                linha = linha.replace("\t", ";");
+            }
+            // Se tiver vírgulas (e não tiver ponto e vírgula), substitui também
+            else if (linha.contains(",") && !linha.contains(";")) {
+                linha = linha.replace(",", ";");
+            }
+
+            // 2. Agora faz o tratamento normal (que já funcionava)
+            String[] colunas = linha.split(";", -1);
+            
+            for (int i = 0; i < colunas.length; i++) {
+                // Remove aspas e espaços das pontas
+                colunas[i] = colunas[i].replace("\"", "").trim();
+                
+                // Se for vazio, escreve "vazio"
+                if (colunas[i].isEmpty()) {
+                    colunas[i] = "vazio";
+                }
+            }
+            
+            // Reconstrói a linha bonitinha com ponto e vírgula
+            linhasTratadas.add(String.join(";", colunas));
+        }
+
+        // Grava de volta no disco
+        Files.write(caminhoArquivo, linhasTratadas, StandardCharsets.UTF_8);
+        System.out.println("Arquivo corrigido (TABS removidos) com sucesso!");
+    }
     private static String getVal(String[] parts, int idx) {
         if (idx >= parts.length) return "";
         return parts[idx].replace("\"", "").trim();

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: postgres_intuitive_care
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: intuitive_care_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # Scripts SQL de inicialização
+      - ./sql:/docker-entrypoint-initdb.d
+      # Mapeia a pasta TEMP do  computador para dentro do Docker
+      - ./TEMP:/data/TEMP
+      # Mapeia a pasta AUX_CSV do  computador para dentro do Docker
+      - ./AUX_CSV:/data/AUX_CSV

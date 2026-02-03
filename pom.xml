@@ -60,6 +60,14 @@
         <artifactId>commons-io</artifactId>
         <version>2.15.1</version>
     </dependency>
+    
+     <!-- dependência do PostgreSQL -->
+    <dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>42.6.0</version> 
+    </dependency>
+    
   </dependencies>
   
 
